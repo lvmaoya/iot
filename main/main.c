@@ -4,6 +4,7 @@
 // #include "blufi_example_main.h"
 #include "wifi_config.h"
 #include "mqtt_client.h"
+#include "servo.h"
 
 #include <string.h>
 #include <sys/param.h>
@@ -99,11 +100,12 @@ void app_main(void)
 {
 
     configure_led();
-    blink_led(16, 16, 16);
+    // 配置伺服电机
+    servoConfig();
     // blufi();
     wifi_connect_init();
     mqtt_app_start();
-
+    servoControl(90);
     while (1)
     {
         th = getTempSensor();
@@ -113,5 +115,8 @@ void app_main(void)
         sprintf(payload, "Temp=%.2f,Humi=%.2f%%", th.temperature, th.humidity);
         esp_mqtt_client_publish(client, "room/temp_humi", payload, 0, 1, 0);
         vTaskDelay(1000); // 延时300毫秒
+        switch_off_led();
+        vTaskDelay(1000); // 延时300毫秒
+        blink_led(16, 16, 16);
     }
 }
