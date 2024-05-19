@@ -25,6 +25,9 @@
 #include "lwip/dns.h"
 #include "lwip/netdb.h"
 
+#include <string.h>
+#include "cJSON.h"
+
 temperature_humidity_t th;
 
 // 事件处理函数
@@ -65,6 +68,43 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_DATA:
         printf("mqtt received topic: %.*s \n", event->topic_len, event->topic);
         printf("topic data: %.*s\r\n", event->data_len, event->data);
+
+        cJSON *root = cJSON_Parse(event->data);
+        if (root == NULL)
+        {
+            printf("Error before: [%s]\n", cJSON_GetErrorPtr());
+            return;
+        }
+        cJSON *led = cJSON_GetObjectItemCaseSensitive(root, "led");
+        cJSON *r = cJSON_GetObjectItemCaseSensitive(root, "r");
+        cJSON *g = cJSON_GetObjectItemCaseSensitive(root, "g");
+        cJSON *b = cJSON_GetObjectItemCaseSensitive(root, "b");
+        cJSON *servo = cJSON_GetObjectItemCaseSensitive(root, "servo");
+        if (led != NULL && cJSON_IsNumber(led) && r != NULL && cJSON_IsNumber(r) && g != NULL && cJSON_IsNumber(g) && b != NULL && cJSON_IsNumber(b))
+        {
+            int ledValue = led->valueint;
+            int rValue = r->valueint;
+            int gValue = g->valueint;
+            int bValue = b->valueint;
+
+            printf("RGB: %d, %d, %d\n", rValue, gValue, bValue);
+            if (ledValue == 1)
+            {
+                blink_led(rValue, gValue, bValue);
+            }
+            else if (ledValue == 0)
+            {
+                switch_off_led();
+            }
+        }
+
+        if (servo != NULL && cJSON_IsNumber(servo))
+        {
+            int servoValue = servo->valueint;
+            servoControl(servoValue);
+        }
+
+        cJSON_Delete(root);
         break;
     // 客户端遇到错误
     case MQTT_EVENT_ERROR:
@@ -112,11 +152,15 @@ void app_main(void)
         printf("Temperature: %.2f°C, Humidity: %.2f%%\n", th.temperature, th.humidity);
         // 将温湿度数据格式化为字符串
         char payload[64];
-        sprintf(payload, "Temp=%.2f,Humi=%.2f%%", th.temperature, th.humidity);
-        esp_mqtt_client_publish(client, "room/temp_humi", payload, 0, 1, 0);
+        // sprintf(payload, "Temp=%.2f,Humi=%.2f%%", th.temperature, th.humidity);
+        // esp_mqtt_client_publish(client, "room/temp_humi", payload, 0, 1, 0);
+        snprintf(payload, sizeof(payload), "{\"Temp\":%.2f,\"Humi\":%.2f}", th.temperature, th.humidity);
+        // 发布到MQTT主题
+        esp_mqtt_client_publish(client, "room/temp_humi", payload, strlen(payload), 1, 0);
+
         vTaskDelay(1000); // 延时300毫秒
-        switch_off_led();
-        vTaskDelay(1000); // 延时300毫秒
-        blink_led(16, 16, 16);
+        // switch_off_led();
+        // vTaskDelay(1000); // 延时300毫秒
+        // blink_led(16, 16, 16);
     }
 }
